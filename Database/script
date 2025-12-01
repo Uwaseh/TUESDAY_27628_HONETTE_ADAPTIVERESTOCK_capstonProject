@@ -1,0 +1,7 @@
+CREATE PLUGGABLE DATABASE tuesday_27628_honette_adaptiveRestock_db
+  ADMIN USER restock_admin IDENTIFIED BY Honette
+  ROLES = (DBA)
+  FILE_NAME_CONVERT = (
+    'C:\APP\RUGEROOLSEN\PRODUCT\21C\ORADATA\ORADATA\XE\PDBSEED\',
+    'C:\APP\RUGEROOLSEN\PRODUCT\21C\ORADATA\ORADATA\XE\tuesday_27628_honette_adaptiveRestock_db\'
+  );
