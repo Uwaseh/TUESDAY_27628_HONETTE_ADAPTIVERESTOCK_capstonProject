@@ -1,1 +1,228 @@
+CREATE TABLE products (
+    product_id          NUMBER GENERATED ALWAYS AS IDENTITY,
+    product_code        VARCHAR2(20) UNIQUE NOT NULL,
+    product_name        VARCHAR2(100) NOT NULL,
+    category            VARCHAR2(50) 
+                        CHECK (category IN ('Dairy','Meat','Produce','Bakery','Seafood','Frozen','Beverages','Snacks')),
+    unit_price          NUMBER(8,2) CHECK (unit_price > 0),
+    min_stock_level     NUMBER DEFAULT 5 CHECK (min_stock_level >= 0),
+    active_status       VARCHAR2(5) DEFAULT 'TRUE'
+                        CHECK (active_status IN ('TRUE','FALSE')),
+    created_at          DATE DEFAULT SYSDATE,
+    CONSTRAINT pk_products PRIMARY KEY (product_id)
+);
+
+
+-- Indexes created appropriately
+
+SELECT index_name, table_name, uniqueness
+FROM user_indexes
+WHERE table_name = 'PRODUCTS';
+
+
+-- table expiry_tracking
+CREATE TABLE expiry_tracking (
+    expiry_id        NUMBER GENERATED ALWAYS AS IDENTITY,
+    product_id       NUMBER NOT NULL,
+    batch_quantity   NUMBER NOT NULL CHECK (batch_quantity > 0),
+    expiry_date      DATE NOT NULL,
+    status           VARCHAR2(20) DEFAULT 'ACTIVE'
+                      CHECK (status IN ('ACTIVE','EXPIRED','DISPOSED')),
+    CONSTRAINT pk_expiry_tracking PRIMARY KEY (expiry_id),
+    CONSTRAINT fk_expiry_product FOREIGN KEY (product_id)
+              REFERENCES products(product_id)
+);
+
+
+CREATE INDEX idx_expiry_product ON expiry_tracking(product_id);
+
+
+--table restock_rules
+CREATE TABLE restock_rules (
+    rule_id            NUMBER GENERATED ALWAYS AS IDENTITY,
+    product_id         NUMBER NOT NULL,
+    restock_amount     NUMBER NOT NULL CHECK (restock_amount > 0),
+    restock_threshold  NUMBER NOT NULL CHECK (restock_threshold >= 0),
+    auto_restock       VARCHAR2(5) DEFAULT 'TRUE'
+                        CHECK (auto_restock IN ('TRUE','FALSE')),
+    CONSTRAINT pk_restock_rules PRIMARY KEY (rule_id),
+    CONSTRAINT fk_restock_product FOREIGN KEY (product_id)
+              REFERENCES products(product_id)
+);
+
+
+CREATE INDEX idx_restock_product ON restock_rules(product_id);
+
+
+--discount table
+
+CREATE TABLE discount_rules (
+    discount_id        NUMBER GENERATED ALWAYS AS IDENTITY,
+    product_id         NUMBER NOT NULL,
+    days_before_expiry NUMBER NOT NULL CHECK (days_before_expiry > 0),
+    discount_percent   NUMBER(5,2) NOT NULL 
+                        CHECK (discount_percent BETWEEN 1 AND 90),
+    active_status      VARCHAR2(5) DEFAULT 'TRUE'
+                        CHECK (active_status IN ('TRUE','FALSE')),
+    CONSTRAINT pk_discount_rules PRIMARY KEY (discount_id),
+    CONSTRAINT fk_discount_product FOREIGN KEY (product_id)
+              REFERENCES products(product_id)
+);
+
+CREATE INDEX idx_discount_product ON discount_rules(product_id);
+
+--TABLE inventory_log
+
+CREATE TABLE inventory_log (
+    log_id            NUMBER GENERATED ALWAYS AS IDENTITY,
+    product_id        NUMBER NOT NULL,
+    change_type       VARCHAR2(20) NOT NULL
+                        CHECK (change_type IN ('RESTOCK','SALE','EXPIRED','MANUAL')),
+    quantity_change   NUMBER NOT NULL CHECK (quantity_change <> 0),
+    log_timestamp     DATE DEFAULT SYSDATE,
+    note              VARCHAR2(200),
+    CONSTRAINT pk_inventory_log PRIMARY KEY (log_id),
+    CONSTRAINT fk_inventory_product FOREIGN KEY (product_id)
+              REFERENCES products(product_id)
+);
+
+
+
+SELECT table_name, constraint_name, constraint_type
+FROM user_constraints
+WHERE table_name IN ('PRODUCTS','EXPIRY_TRACKING','RESTOCK_RULES',
+                     'DISCOUNT_RULES','INVENTORY_LOG')
+ORDER BY table_name, constraint_type;
+
+
+
+--insert Products
+BEGIN
+    FOR i IN 1..200 LOOP
+        INSERT INTO products (
+            product_code,
+            product_name,
+            category,
+            unit_price,
+            min_stock_level,
+            active_status
+        ) VALUES (
+            'P' || TO_CHAR(i, 'FM000'),
+            'Product ' || i,
+            CASE 
+                WHEN MOD(i,7)=0 THEN 'Dairy'
+                WHEN MOD(i,7)=1 THEN 'Meat'
+                WHEN MOD(i,7)=2 THEN 'Produce'
+                WHEN MOD(i,7)=3 THEN 'Bakery'
+                WHEN MOD(i,7)=4 THEN 'Seafood'
+                WHEN MOD(i,7)=5 THEN 'Frozen'
+                ELSE 'Snacks'
+            END,
+            ROUND(DBMS_RANDOM.VALUE(1,50),2),
+            TRUNC(DBMS_RANDOM.VALUE(1,20)),
+            'TRUE'
+        );
+    END LOOP;
+END;
+/
+
+
+SELECT COUNT(*) FROM products;
+
+
+--  INSERT INTO expiry_tracking
+BEGIN
+    FOR i IN 1..300 LOOP
+        INSERT INTO expiry_tracking (
+            product_id,
+            batch_quantity,
+            expiry_date,
+            status
+        ) VALUES (
+            TRUNC(DBMS_RANDOM.VALUE(1,200)),        -- valid product
+            TRUNC(DBMS_RANDOM.VALUE(10,200)),       -- quantity 10–200
+            SYSDATE + TRUNC(DBMS_RANDOM.VALUE(-20, 40)),  -- some expired, some fresh
+            'ACTIVE'
+        );
+    END LOOP;
+END;
+/
+
+
+
+
+BEGIN
+    FOR i IN 1..150 LOOP
+        INSERT INTO restock_rules (
+            product_id,
+            restock_amount,
+            restock_threshold,
+            auto_restock
+        ) VALUES (
+            TRUNC(DBMS_RANDOM.VALUE(1,200)),   -- valid product reference
+            TRUNC(DBMS_RANDOM.VALUE(10,60)),   -- restock amount 10–60
+            TRUNC(DBMS_RANDOM.VALUE(1,20)),    -- threshold 1–20
+            'TRUE'
+        );
+    END LOOP;
+END;
+/
+
+SELECT COUNT(*) FROM restock_rules;
+
+BEGIN
+    FOR i IN 1..100 LOOP
+        INSERT INTO discount_rules (
+            product_id,
+            days_before_expiry,
+            discount_percent,
+            active_status
+        ) VALUES (
+            TRUNC(DBMS_RANDOM.VALUE(1,200)),      -- valid product reference
+            TRUNC(DBMS_RANDOM.VALUE(1,10)),       -- expires within 1–10 days
+            ROUND(DBMS_RANDOM.VALUE(5,50), 2),    -- discount between 5%–50%
+            'TRUE'
+        );
+    END LOOP;
+END;
+/
+
+SELECT COUNT(*) FROM discount_rules;
+
+
+DECLARE
+    v_qty NUMBER;
+BEGIN
+    FOR i IN 1..300 LOOP
+        
+        -- Generate quantity ONCE
+        v_qty := TRUNC(DBMS_RANDOM.VALUE(-50,50));
+        
+        -- Make sure quantity_change is never zero
+        IF v_qty = 0 THEN 
+            v_qty := 1;
+        END IF;
+
+        INSERT INTO inventory_log (
+            product_id,
+            change_type,
+            quantity_change,
+            note
+        ) VALUES (
+            TRUNC(DBMS_RANDOM.VALUE(1,200)),    
+            CASE 
+                WHEN MOD(i,4)=0 THEN 'RESTOCK'
+                WHEN MOD(i,4)=1 THEN 'SALE'
+                WHEN MOD(i,4)=2 THEN 'EXPIRED'
+                ELSE 'MANUAL'
+            END,
+            v_qty,
+            'Auto-generated log entry #' || i
+        );
+        
+    END LOOP;
+END;
+/
+
+SELECT COUNT(*) FROM inventory_log;
 
