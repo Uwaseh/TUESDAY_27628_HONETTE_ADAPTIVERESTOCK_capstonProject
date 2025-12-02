@@ -226,3 +226,26 @@ END;
 
 SELECT COUNT(*) FROM inventory_log;
 
+--Query to select all tables
+SELECT table_name 
+FROM user_tables
+ORDER BY table_name;
+
+
+--Query VERIFY ROW COUNTS
+
+SELECT 'PRODUCTS' AS table_name, COUNT(*) AS row_count FROM products
+UNION ALL
+SELECT 'EXPIRY_TRACKING', COUNT(*) FROM expiry_tracking
+UNION ALL
+SELECT 'RESTOCK_RULES', COUNT(*) FROM restock_rules
+UNION ALL
+SELECT 'DISCOUNT_RULES', COUNT(*) FROM discount_rules
+UNION ALL
+SELECT 'INVENTORY_LOG', COUNT(*) FROM inventory_log;
+
+
+
+--Sampleinputed data
+
+SELECT * FROM expiry_tracking FETCH FIRST 10 ROWS ONLY;
